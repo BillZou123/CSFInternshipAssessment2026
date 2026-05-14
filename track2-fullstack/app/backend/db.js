@@ -44,4 +44,22 @@ function initDb() {
   `);
 }
 
-module.exports = { db, initDb };
+function withTransaction(callback) {
+  db.exec('BEGIN');
+
+  try {
+    const result = callback();
+    db.exec('COMMIT');
+    return result;
+  } catch (error) {
+    try {
+      db.exec('ROLLBACK');
+    } catch {
+      // no-op
+    }
+
+    throw error;
+  }
+}
+
+module.exports = { db, initDb, withTransaction };

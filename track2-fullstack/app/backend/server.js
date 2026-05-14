@@ -1,7 +1,7 @@
 const express = require('express');
 const path = require('path');
 const { initDb } = require('./db');
-const animalsRouter = require('./routes/animals');
+const animalsRouter = require('./routes/animalsRouter');
 const paddocksRouter = require('./routes/paddocks');
 
 const app = express();
