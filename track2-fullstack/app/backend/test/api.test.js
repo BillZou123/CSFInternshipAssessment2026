@@ -92,6 +92,20 @@ test('GET /api/animals returns animals with latest_health_event field', async ()
   assert.ok(Array.isArray(body));
   assert.ok(body.length > 0);
   assert.ok('latest_health_event' in body[0]);
+  assert.ok('paddock_name' in body[0]);
+});
+
+test('GET /api/animals can filter by search and paddock', async () => {
+  const { body: paddocks } = await get('/paddocks');
+  const north = paddocks.find(p => p.name === 'North Paddock');
+
+  const { status: searchStatus, body: searchResults } = await get('/animals?search=Bella&limit=10');
+  assert.equal(searchStatus, 200);
+  assert.ok(searchResults.some(a => a.name === 'Bella'));
+
+  const { status: paddockStatus, body: paddockResults } = await get(`/animals?paddock_id=${north.id}&limit=10`);
+  assert.equal(paddockStatus, 200);
+  assert.ok(paddockResults.every(a => a.paddock_id === north.id));
 });
 
 test('GET /api/animals paginates without overlapping records', async () => {

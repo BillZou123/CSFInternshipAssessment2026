@@ -1,32 +1,48 @@
 const API_BASE = '/api';
 
+async function readResponseBody(res) {
+  const contentType = res.headers.get('content-type') || '';
+
+  if (contentType.includes('application/json')) {
+    return res.json();
+  }
+
+  return res.text();
+}
+
+async function request(path, options = {}) {
+  const res = await fetch(API_BASE + path, options);
+  const body = await readResponseBody(res);
+
+  if (!res.ok) {
+    const message = body && typeof body === 'object' && body.error
+      ? body.error
+      : `${options.method || 'GET'} ${path} failed: ${res.status}`;
+    throw new Error(message);
+  }
+
+  return body;
+}
+
 const api = {
   async get(path) {
-    const res = await fetch(API_BASE + path);
-    if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`);
-    return res.json();
+    return request(path);
   },
   async post(path, body) {
-    const res = await fetch(API_BASE + path, {
+    return request(path, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    if (!res.ok) throw new Error(`POST ${path} failed: ${res.status}`);
-    return res.json();
   },
   async put(path, body) {
-    const res = await fetch(API_BASE + path, {
+    return request(path, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    if (!res.ok) throw new Error(`PUT ${path} failed: ${res.status}`);
-    return res.json();
   },
   async delete(path) {
-    const res = await fetch(API_BASE + path, { method: 'DELETE' });
-    if (!res.ok) throw new Error(`DELETE ${path} failed: ${res.status}`);
-    return res.json();
+    return request(path, { method: 'DELETE' });
   },
 };

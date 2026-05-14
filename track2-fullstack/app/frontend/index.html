@@ -32,17 +32,19 @@
         return;
       }
       grid.innerHTML = paddocks.map(p => `
-        <div class="card">
+        <a class="card card-link" href="animals.html?paddock_id=${p.id}">
           <h3>${p.name}</h3>
           <p class="stat">${p.animal_count} / ${p.capacity} animals</p>
           <div class="capacity-bar">
             <div class="capacity-fill" style="width: ${Math.min(100, Math.round((p.animal_count / p.capacity) * 100))}%"></div>
           </div>
-        </div>
+        </a>
       `).join('');
     }
 
-    loadPaddocks();
+    loadPaddocks().catch(error => {
+      document.getElementById('paddocks-grid').innerHTML = `<p class="error-banner">${error.message}</p>`;
+    });
   </script>
 </body>
 </html>

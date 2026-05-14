@@ -8,7 +8,12 @@ function isUniqueConstraintError(error, table, column) {
 }
 
 function getAnimalById(id) {
-  const animal = db.prepare('SELECT * FROM animals WHERE id = ?').get(id);
+  const animal = db.prepare(`
+    SELECT animals.*, paddocks.name AS paddock_name
+    FROM animals
+    LEFT JOIN paddocks ON paddocks.id = animals.paddock_id
+    WHERE animals.id = ?
+  `).get(id);
   if (!animal) {
     throw new HttpError(404, 'Animal not found');
   }
@@ -32,11 +37,32 @@ function getPaddockForAssignmentOrThrow(paddockId) {
   return paddock;
 }
 
-function listAnimals(page, limit) {
+function listAnimals(page, limit, filters = {}) {
   const offset = page * limit;
-  const animals = db.prepare(
-    'SELECT * FROM animals LIMIT ? OFFSET ?'
-  ).all(limit, offset);
+  const where = [];
+  const params = [];
+
+  if (filters.search) {
+    where.push('(animals.name LIKE ? OR animals.tag_number LIKE ? OR animals.breed LIKE ?)');
+    const term = `%${filters.search}%`;
+    params.push(term, term, term);
+  }
+
+  if (filters.paddockId !== undefined && filters.paddockId !== null && filters.paddockId !== '') {
+    where.push('animals.paddock_id = ?');
+    params.push(filters.paddockId);
+  }
+
+  const sql = `
+    SELECT animals.*, paddocks.name AS paddock_name
+    FROM animals
+    LEFT JOIN paddocks ON paddocks.id = animals.paddock_id
+    ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+    ORDER BY animals.id ASC
+    LIMIT ? OFFSET ?
+  `;
+
+  const animals = db.prepare(sql).all(...params, limit, offset);
 
   return animals.map(animal => {
     const latestEvent = db.prepare(`

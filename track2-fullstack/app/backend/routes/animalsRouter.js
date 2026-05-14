@@ -16,7 +16,10 @@ router.get('/', (req, res) => {
   try {
     const page = parseInt(req.query.page) || 0;
     const limit = parseInt(req.query.limit) || 10;
-    res.json(animalService.listAnimals(page, limit));
+    res.json(animalService.listAnimals(page, limit, {
+      search: req.query.search?.trim() || '',
+      paddockId: req.query.paddock_id,
+    }));
   } catch (error) {
     sendError(res, error, 'Failed to list animals');
   }

@@ -18,6 +18,22 @@
     <div class="page-header">
       <h2>Animals</h2>
     </div>
+    <div class="page-tools">
+      <form id="filters-form" class="filters-form">
+        <label>
+          Search
+          <input type="search" id="search-input" name="search" placeholder="Tag, name, or breed">
+        </label>
+        <label>
+          Paddock
+          <select id="paddock-filter" name="paddock_id">
+            <option value="">All paddocks</option>
+          </select>
+        </label>
+        <button type="submit">Apply</button>
+        <button type="button" id="clear-filters">Clear</button>
+      </form>
+    </div>
     <table>
       <thead>
         <tr>
@@ -43,9 +59,36 @@
   <script>
     let currentPage = 0;
     const LIMIT = 5;
+    const searchParams = new URLSearchParams(window.location.search);
+    let currentSearch = searchParams.get('search') || '';
+    let currentPaddockId = searchParams.get('paddock_id') || '';
+
+    function formatAnimalPaddock(animal) {
+      if (animal.paddock_name) {
+        return animal.paddock_id
+          ? `<a href="animals.html?paddock_id=${animal.paddock_id}">${animal.paddock_name}</a>`
+          : animal.paddock_name;
+      }
+
+      return animal.paddock_id ?? '—';
+    }
+
+    async function loadFilters() {
+      const paddocks = await api.get('/paddocks');
+      const select = document.getElementById('paddock-filter');
+      select.innerHTML = ['<option value="">All paddocks</option>']
+        .concat(paddocks.map(p => `<option value="${p.id}">${p.name}</option>`))
+        .join('');
+      select.value = currentPaddockId;
+      document.getElementById('search-input').value = currentSearch;
+    }
 
     async function loadAnimals() {
-      const animals = await api.get(`/animals?page=${currentPage}&limit=${LIMIT}`);
+      const query = new URLSearchParams({ page: currentPage, limit: LIMIT });
+      if (currentSearch) query.set('search', currentSearch);
+      if (currentPaddockId) query.set('paddock_id', currentPaddockId);
+
+      const animals = await api.get(`/animals?${query.toString()}`);
       const tbody = document.getElementById('animals-body');
 
       if (!animals.length) {
@@ -63,7 +106,7 @@
             <td>${a.tag_number}</td>
             <td>${a.name}</td>
             <td>${a.breed ?? '—'}</td>
-            <td>${a.paddock_id ?? '—'}</td>
+            <td>${formatAnimalPaddock(a)}</td>
             <td>${event}</td>
             <td><a href="animal-detail.html?id=${a.id}">View</a></td>
           </tr>
@@ -80,7 +123,26 @@
       loadAnimals();
     }
 
-    loadAnimals();
+    document.getElementById('filters-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      currentPage = 0;
+      currentSearch = document.getElementById('search-input').value.trim();
+      currentPaddockId = document.getElementById('paddock-filter').value;
+      await loadAnimals();
+    });
+
+    document.getElementById('clear-filters').addEventListener('click', async () => {
+      currentPage = 0;
+      currentSearch = '';
+      currentPaddockId = '';
+      document.getElementById('search-input').value = '';
+      document.getElementById('paddock-filter').value = '';
+      await loadAnimals();
+    });
+
+    Promise.all([loadFilters(), loadAnimals()]).catch(error => {
+      document.getElementById('animals-body').innerHTML = `<tr><td colspan="6" class="error-banner">${error.message}</td></tr>`;
+    });
   </script>
 </body>
 </html>
