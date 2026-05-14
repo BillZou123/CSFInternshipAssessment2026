@@ -18,6 +18,20 @@
     <a href="animals.html" class="back-link">← Back to Animals</a>
     <div id="animal-detail"><p class="loading">Loading…</p></div>
     <p id="page-error" class="error-banner" style="display:none"></p>
+    <p id="page-success" class="success-banner" style="display:none"></p>
+
+    <section id="movement-section" style="display:none">
+      <h3>Move Animal</h3>
+      <form id="move-form">
+        <label>
+          Paddock
+          <select id="move-paddock-id" name="paddock_id">
+            <option value="">Unassigned</option>
+          </select>
+        </label>
+        <button type="submit">Update Paddock</button>
+      </form>
+    </section>
 
     <section id="weights-section" style="display:none">
       <h3>Weight History</h3>
@@ -80,6 +94,41 @@
       });
     }
 
+    function showError(message) {
+      const error = document.getElementById('page-error');
+      error.style.display = 'block';
+      error.textContent = message;
+    }
+
+    function clearError() {
+      const error = document.getElementById('page-error');
+      error.style.display = 'none';
+      error.textContent = '';
+    }
+
+    function showSuccess(message) {
+      const success = document.getElementById('page-success');
+      success.style.display = 'block';
+      success.textContent = message;
+    }
+
+    function clearSuccess() {
+      const success = document.getElementById('page-success');
+      success.style.display = 'none';
+      success.textContent = '';
+    }
+
+    async function loadMovementForm(currentPaddockId) {
+      const paddocks = await api.get('/paddocks');
+      const select = document.getElementById('move-paddock-id');
+
+      select.innerHTML = ['<option value="">Unassigned</option>']
+        .concat(paddocks.map(p => `<option value="${p.id}">${p.name}</option>`))
+        .join('');
+
+      select.value = currentPaddockId ?? '';
+    }
+
     async function load() {
       const animal = await api.get(`/animals/${animalId}`);
 
@@ -95,8 +144,10 @@
         </dl>
       `;
 
+      document.getElementById('movement-section').style.display = 'block';
       document.getElementById('weights-section').style.display = 'block';
       document.getElementById('health-section').style.display = 'block';
+      await loadMovementForm(animal.paddock_id);
       await loadWeights();
       await loadEvents();
     }
@@ -156,9 +207,25 @@
       await loadWeights();
     });
 
+    document.getElementById('move-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      clearError();
+      clearSuccess();
+
+      const paddockValue = document.getElementById('move-paddock-id').value;
+      const payload = { paddock_id: paddockValue === '' ? null : Number(paddockValue) };
+
+      try {
+        await api.put(`/animals/${animalId}`, payload);
+        showSuccess('Paddock updated successfully.');
+        await load();
+      } catch (error) {
+        showError(error.message);
+      }
+    });
+
     load().catch(error => {
-      document.getElementById('page-error').style.display = 'block';
-      document.getElementById('page-error').textContent = error.message;
+      showError(error.message);
     });
   </script>
 </body>
