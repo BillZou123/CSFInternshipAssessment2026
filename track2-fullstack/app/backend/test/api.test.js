@@ -69,6 +69,15 @@ async function post(path, body) {
   return { status: res.status, body: await res.json() };
 }
 
+async function put(path, body) {
+  const res = await fetch(baseUrl + path, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return { status: res.status, body: await res.json() };
+}
+
 test('GET /api/paddocks returns an array', async () => {
   const { status, body } = await get('/paddocks');
   assert.equal(status, 200);
@@ -107,4 +116,22 @@ test('POST /api/animals/:id/health-events creates an event', async () => {
   assert.equal(status, 201);
   assert.equal(body.event_type, 'checkup');
   assert.equal(body.animal_id, id);
+});
+
+test('PUT /api/animals/:id reassigns paddock and keeps counts consistent', async () => {
+  const { body: paddocksBefore } = await get('/paddocks');
+  const north = paddocksBefore.find(p => p.name === 'North Paddock');
+  const south = paddocksBefore.find(p => p.name === 'South Paddock');
+
+  const { body: bella } = await get('/animals/1');
+  assert.equal(bella.paddock_id, north.id);
+
+  const { status } = await put('/animals/1', { paddock_id: south.id });
+  assert.equal(status, 200);
+
+  const { body: northAfter } = await get(`/paddocks/${north.id}`);
+  const { body: southAfter } = await get(`/paddocks/${south.id}`);
+
+  assert.equal(northAfter.animal_count, north.animal_count - 1);
+  assert.equal(southAfter.animal_count, south.animal_count + 1);
 });

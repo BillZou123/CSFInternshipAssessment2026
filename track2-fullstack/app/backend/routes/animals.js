@@ -63,7 +63,27 @@ router.put('/:id', (req, res) => {
   };
 
   if (updates.paddock_id !== animal.paddock_id) {
-    if (updates.paddock_id) {
+    if (updates.paddock_id !== null) {
+      const targetPaddock = db.prepare(
+        'SELECT id, capacity, animal_count FROM paddocks WHERE id = ?'
+      ).get(updates.paddock_id);
+
+      if (!targetPaddock) {
+        return res.status(422).json({ error: 'Invalid paddock_id' });
+      }
+
+      if (targetPaddock.animal_count >= targetPaddock.capacity) {
+        return res.status(422).json({ error: 'Paddock is at full capacity' });
+      }
+    }
+
+    if (animal.paddock_id !== null) {
+      db.prepare(
+        'UPDATE paddocks SET animal_count = animal_count - 1 WHERE id = ?'
+      ).run(animal.paddock_id);
+    }
+
+    if (updates.paddock_id !== null) {
       db.prepare(
         'UPDATE paddocks SET animal_count = animal_count + 1 WHERE id = ?'
       ).run(updates.paddock_id);
