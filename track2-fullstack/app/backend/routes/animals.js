@@ -2,6 +2,11 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../db');
 
+function isUniqueConstraintError(error, table, column) {
+  return error && typeof error.message === 'string'
+    && error.message.includes(`UNIQUE constraint failed: ${table}.${column}`);
+}
+
 router.get('/', (req, res) => {
   const page = parseInt(req.query.page) || 0;
   const limit = parseInt(req.query.limit) || 10;
@@ -31,18 +36,50 @@ router.post('/', (req, res) => {
     return res.status(400).json({ error: 'name and tag_number are required' });
   }
 
-  if (paddock_id) {
-    db.prepare(
-      'UPDATE paddocks SET animal_count = animal_count + 1 WHERE id = ?'
-    ).run(paddock_id);
+  if (paddock_id !== undefined && paddock_id !== null) {
+    const paddock = db.prepare(
+      'SELECT id, capacity, animal_count FROM paddocks WHERE id = ?'
+    ).get(paddock_id);
+
+    if (!paddock) {
+      return res.status(422).json({ error: 'Invalid paddock_id' });
+    }
+
+    if (paddock.animal_count >= paddock.capacity) {
+      return res.status(422).json({ error: 'Paddock is at full capacity' });
+    }
   }
 
-  const result = db.prepare(
-    'INSERT INTO animals (name, tag_number, breed, date_of_birth, paddock_id) VALUES (?, ?, ?, ?, ?)'
-  ).run(name, tag_number, breed ?? null, date_of_birth ?? null, paddock_id ?? null);
+  try {
+    db.exec('BEGIN');
 
-  const animal = db.prepare('SELECT * FROM animals WHERE id = ?').get(result.lastInsertRowid);
-  res.json(animal);
+    const result = db.prepare(
+      'INSERT INTO animals (name, tag_number, breed, date_of_birth, paddock_id) VALUES (?, ?, ?, ?, ?)'
+    ).run(name, tag_number, breed ?? null, date_of_birth ?? null, paddock_id ?? null);
+
+    if (paddock_id !== undefined && paddock_id !== null) {
+      db.prepare(
+        'UPDATE paddocks SET animal_count = animal_count + 1 WHERE id = ?'
+      ).run(paddock_id);
+    }
+
+    db.exec('COMMIT');
+
+    const animal = db.prepare('SELECT * FROM animals WHERE id = ?').get(result.lastInsertRowid);
+    res.status(201).json(animal);
+  } catch (error) {
+    try {
+      db.exec('ROLLBACK');
+    } catch {
+      // no-op
+    }
+
+    if (isUniqueConstraintError(error, 'animals', 'tag_number')) {
+      return res.status(409).json({ error: 'tag_number must be unique' });
+    }
+
+    return res.status(500).json({ error: 'Failed to create animal' });
+  }
 });
 
 router.get('/:id', (req, res) => {
@@ -78,27 +115,48 @@ router.put('/:id', (req, res) => {
       }
     }
 
-    if (animal.paddock_id !== null) {
-      db.prepare(
-        'UPDATE paddocks SET animal_count = animal_count - 1 WHERE id = ?'
-      ).run(animal.paddock_id);
-    }
-
-    if (updates.paddock_id !== null) {
-      db.prepare(
-        'UPDATE paddocks SET animal_count = animal_count + 1 WHERE id = ?'
-      ).run(updates.paddock_id);
-    }
   }
 
-  db.prepare(`
-    UPDATE animals
-    SET name = ?, tag_number = ?, breed = ?, date_of_birth = ?, paddock_id = ?
-    WHERE id = ?
-  `).run(updates.name, updates.tag_number, updates.breed, updates.date_of_birth, updates.paddock_id, req.params.id);
+  try {
+    db.exec('BEGIN');
 
-  const updated = db.prepare('SELECT * FROM animals WHERE id = ?').get(req.params.id);
-  res.json(updated);
+    db.prepare(`
+      UPDATE animals
+      SET name = ?, tag_number = ?, breed = ?, date_of_birth = ?, paddock_id = ?
+      WHERE id = ?
+    `).run(updates.name, updates.tag_number, updates.breed, updates.date_of_birth, updates.paddock_id, req.params.id);
+
+    if (updates.paddock_id !== animal.paddock_id) {
+      if (animal.paddock_id !== null) {
+        db.prepare(
+          'UPDATE paddocks SET animal_count = animal_count - 1 WHERE id = ?'
+        ).run(animal.paddock_id);
+      }
+
+      if (updates.paddock_id !== null) {
+        db.prepare(
+          'UPDATE paddocks SET animal_count = animal_count + 1 WHERE id = ?'
+        ).run(updates.paddock_id);
+      }
+    }
+
+    db.exec('COMMIT');
+
+    const updated = db.prepare('SELECT * FROM animals WHERE id = ?').get(req.params.id);
+    res.json(updated);
+  } catch (error) {
+    try {
+      db.exec('ROLLBACK');
+    } catch {
+      // no-op
+    }
+
+    if (isUniqueConstraintError(error, 'animals', 'tag_number')) {
+      return res.status(409).json({ error: 'tag_number must be unique' });
+    }
+
+    return res.status(500).json({ error: 'Failed to update animal' });
+  }
 });
 
 router.delete('/:id', (req, res) => {

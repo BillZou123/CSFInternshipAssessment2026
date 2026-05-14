@@ -120,6 +120,41 @@ test('GET /api/animals/:id returns 404 for unknown id', async () => {
   assert.equal(status, 404);
 });
 
+test('POST /api/animals creates animal and returns 201', async () => {
+  const { status, body } = await post('/animals', {
+    name: 'Ruby',
+    tag_number: 'TAG-100',
+    breed: 'Merino',
+    date_of_birth: '2023-01-01',
+  });
+
+  assert.equal(status, 201);
+  assert.equal(body.name, 'Ruby');
+  assert.equal(body.tag_number, 'TAG-100');
+});
+
+test('POST /api/animals returns 409 when tag_number already exists', async () => {
+  const { status, body } = await post('/animals', {
+    name: 'Duplicate Tag',
+    tag_number: 'TAG-001',
+    breed: 'Dorper',
+  });
+
+  assert.equal(status, 409);
+  assert.equal(body.error, 'tag_number must be unique');
+});
+
+test('POST /api/animals returns 422 for invalid paddock_id', async () => {
+  const { status, body } = await post('/animals', {
+    name: 'Bad Paddock',
+    tag_number: 'TAG-101',
+    paddock_id: 999999,
+  });
+
+  assert.equal(status, 422);
+  assert.equal(body.error, 'Invalid paddock_id');
+});
+
 test('POST /api/animals/:id/health-events creates an event', async () => {
   const { body: animals } = await get('/animals?page=0&limit=1');
   const id = animals[0].id;
