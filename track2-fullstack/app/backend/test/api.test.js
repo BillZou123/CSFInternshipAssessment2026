@@ -46,7 +46,9 @@ function seedTestData() {
 
   const bellaId = insertAnimal.run('Bella', 'TAG-001', 'Merino', '2021-03-14', northId).lastInsertRowid;
   insertAnimal.run('Daisy', 'TAG-002', 'Dorper', '2020-07-22', southId);
+  insertAnimal.run('Milo', 'TAG-003', 'Suffolk', '2022-05-09', northId);
 
+  db.prepare('UPDATE paddocks SET animal_count = animal_count + 1 WHERE id = ?').run(northId);
   db.prepare('UPDATE paddocks SET animal_count = animal_count + 1 WHERE id = ?').run(northId);
   db.prepare('UPDATE paddocks SET animal_count = animal_count + 1 WHERE id = ?').run(southId);
 
@@ -90,6 +92,19 @@ test('GET /api/animals returns animals with latest_health_event field', async ()
   assert.ok(Array.isArray(body));
   assert.ok(body.length > 0);
   assert.ok('latest_health_event' in body[0]);
+});
+
+test('GET /api/animals paginates without overlapping records', async () => {
+  const { status: page0Status, body: page0 } = await get('/animals?page=0&limit=2');
+  const { status: page1Status, body: page1 } = await get('/animals?page=1&limit=2');
+
+  assert.equal(page0Status, 200);
+  assert.equal(page1Status, 200);
+
+  const page0Ids = new Set(page0.map(a => a.id));
+  const overlap = page1.some(a => page0Ids.has(a.id));
+
+  assert.equal(overlap, false);
 });
 
 test('GET /api/animals/:id returns a single animal', async () => {
