@@ -30,7 +30,7 @@ after(async () => {
 });
 
 function seedTestData() {
-  db.exec('DELETE FROM health_events; DELETE FROM animals; DELETE FROM paddocks;');
+  db.exec('DELETE FROM health_events; DELETE FROM weights; DELETE FROM animals; DELETE FROM paddocks;');
 
   const northId = db.prepare(
     'INSERT INTO paddocks (name, capacity, animal_count) VALUES (?, ?, 0)'
@@ -153,6 +153,61 @@ test('POST /api/animals returns 422 for invalid paddock_id', async () => {
 
   assert.equal(status, 422);
   assert.equal(body.error, 'Invalid paddock_id');
+});
+
+test('POST /api/animals/:id/weights creates a weight record and returns 201', async () => {
+  const { status, body } = await post('/animals/1/weights', {
+    weight_kg: 45.2,
+    date: '2024-11-15',
+    notes: 'Post-shearing weigh-in',
+  });
+
+  assert.equal(status, 201);
+  assert.equal(body.animal_id, 1);
+  assert.equal(body.weight_kg, 45.2);
+  assert.equal(body.date, '2024-11-15');
+  assert.equal(body.notes, 'Post-shearing weigh-in');
+});
+
+test('POST /api/animals/:id/weights returns 422 for missing or non-positive weight_kg', async () => {
+  const missing = await post('/animals/1/weights', {
+    date: '2024-11-15',
+  });
+  assert.equal(missing.status, 422);
+
+  const zero = await post('/animals/1/weights', {
+    weight_kg: 0,
+    date: '2024-11-15',
+  });
+  assert.equal(zero.status, 422);
+});
+
+test('POST /api/animals/:id/weights returns 404 if animal does not exist', async () => {
+  const { status } = await post('/animals/999999/weights', {
+    weight_kg: 50,
+    date: '2024-11-15',
+  });
+
+  assert.equal(status, 404);
+});
+
+test('GET /api/animals/:id/weights returns weight history ordered by date descending', async () => {
+  await post('/animals/2/weights', {
+    weight_kg: 44.3,
+    date: '2024-11-10',
+  });
+  await post('/animals/2/weights', {
+    weight_kg: 45.2,
+    date: '2024-11-15',
+  });
+
+  const { status, body } = await get('/animals/2/weights');
+
+  assert.equal(status, 200);
+  assert.ok(Array.isArray(body));
+  assert.equal(body.length, 2);
+  assert.equal(body[0].date, '2024-11-15');
+  assert.equal(body[1].date, '2024-11-10');
 });
 
 test('POST /api/animals/:id/health-events creates an event', async () => {
